@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Winter AR — Snowmen & Pine Trees</title>
+
+    <!-- A-Frame (WebXR) -->
+    <script src="https://aframe.io/releases/1.7.1/aframe.min.js"></script>
+
+    <link rel="stylesheet" href="./css/style.css" />
+  </head>
+
+  <body>
+    <!-- DOM overlay UI (works in AR when dom-overlay is enabled) -->
+    <div id="overlay" aria-label="Controls">
+      <div class="panel">
+        <div class="row">
+          <button id="btnSnowman" type="button" title="Place snowmen">☃️ Snowman</button>
+          <button id="btnTree" type="button" title="Place pine trees">🌲 Pine</button>
+        </div>
+        <div class="row">
+          <button id="btnMode" type="button" title="Toggle between spawning new objects or moving a single preview">Mode: Spawn</button>
+          <button id="btnClear" type="button" title="Remove all placed objects">Clear</button>
+        </div>
+        <p class="hint">
+          • Press <b>AR</b>, scan the floor/desk. <br />
+          • <b>Spawn</b>: each tap places a new object. <br />
+          • <b>Move</b>: tap to move the preview object.
+        </p>
+      </div>
+    </div>
+
+    <!--
+      WebXR: request hit-test (needed for ar-hit-test), and dom-overlay to show our HTML UI in AR.
+      The ar-hit-test component provides a reticle and fires ar-hit-test-select events in AR.
+    -->
+    <a-scene
+      id="scene"
+      webxr="optionalFeatures: hit-test, dom-overlay; overlayElement: #overlay;"
+      ar-hit-test
+      renderer="colorManagement: true; antialias: true"
+      vr-mode-ui="enabled: true"
+    >
+      <!-- Soft winter sky tint for non-AR preview; in AR, camera passthrough dominates -->
+      <a-sky color="#bfe9ff"></a-sky>
+
+      <!-- Lights for 3D objects -->
+      <a-entity light="type: hemisphere; color: #ffffff; groundColor: #b9d6ff; intensity: 0.9"></a-entity>
+      <a-entity light="type: directional; color: #ffffff; intensity: 0.7" position="1 3 2"></a-entity>
+
+      <!-- Camera -->
+      <a-entity camera look-controls position="0 1.6 0"></a-entity>
+
+      <!-- Preview (used in Move mode). Hidden initially; ar-hit-test will show it after placement. -->
+      <a-entity id="preview" visible="false"></a-entity>
+
+      <!-- Container for spawned objects -->
+      <a-entity id="placed"></a-entity>
+
+      <script type="module">
+        import { setupUI, state } from './js/ui-toggle.js';
+        import { setPreviewPrefab } from './js/prefabs.js';
+        import { enableSpawnOnTap, disableSpawnOnTap, clearPlaced } from './js/spawn-on-tap.js';
+
+        const scene = document.getElementById('scene');
+        const preview = document.getElementById('preview');
+        const placed = document.getElementById('placed');
+        const btnMode = document.getElementById('btnMode');
+        const btnClear = document.getElementById('btnClear');
+
+        // Two interaction modes:
+        //  - 'spawn': each tap spawns a new object at the hit-test pose.
+        //  - 'move': a single preview object is moved by the built-in ar-hit-test targeting.
+        // Default to 'spawn' (bonus task).
+        state.mode = 'spawn';
+
+        setupUI({
+          onSelectionChanged: () => {
+            // Update preview contents in Move mode so the thing that moves matches the selection.
+            if (state.mode === 'move') setPreviewPrefab(preview, state.selected);
+          }
+        });
+
+        // Initialize preview contents (for Move mode; harmless otherwise).
+        setPreviewPrefab(preview, state.selected);
+
+        function applyMode() {
+          if (state.mode === 'move') {
+            // Let ar-hit-test auto-teleport #preview when user selects.
+            scene.setAttribute('ar-hit-test', 'target: #preview');
+            // Spawn listener not needed.
+            disableSpawnOnTap(scene);
+            // In Move mode, preview starts hidden; ar-hit-test will show it after first placement.
+            preview.setAttribute('visible', 'false');
+            btnMode.textContent = 'Mode: Move';
+          } else {
+            // Spawn mode: no target; we handle ar-hit-test-select ourselves.
+            scene.setAttribute('ar-hit-test', '');
+            preview.setAttribute('visible', 'false');
+            enableSpawnOnTap(scene, placed, () => state.selected);
+            btnMode.textContent = 'Mode: Spawn';
+          }
+        }
+
+        btnMode.addEventListener('click', () => {
+          state.mode = state.mode === 'spawn' ? 'move' : 'spawn';
+          applyMode();
+        });
+
+        btnClear.addEventListener('click', () => clearPlaced(placed));
+
+        // Start in spawn mode.
+        applyMode();
+      </script>
+    </a-scene>
+  </body>
+</html>
